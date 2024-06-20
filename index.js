@@ -4,7 +4,7 @@ import { v4 as uuidv4 } from "uuid";
 const storage = new Storage();
 const bucketName = "";
 
-export const uploadImage = async (req, res) => {
+export const upload_image = async (req, res) => {
   if (req.method !== "POST") {
     return res.status(405).send("Method Not Allowed");
   }
