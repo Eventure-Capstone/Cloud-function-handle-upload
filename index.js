@@ -1,42 +1,44 @@
-const { Storage } = require("@google-cloud/storage");
-const { v4: uuidv4 } = require("uuid");
-const storage = new Storage();
+import { Storage } from "@google-cloud/storage";
+import { v4 as uuidv4 } from "uuid";
 
+const storage = new Storage();
 const bucketName = "";
 
-exports.upload_image = async (req, res) => {
-  try {
-    if (!req.file) {
-      return res.status(400).json({ error: "No file uploaded." });
-    }
-
-    const file = req.file;
-    const fileExtension = file.originalname.split(".").pop();
-    const fileName = `user-profile-images/${uuidv4()}.${fileExtension}`;
-
-    const bucket = storage.bucket(bucketName);
-    const fileUpload = bucket.file(fileName);
-
-    const stream = fileUpload.createWriteStream({
-      metadata: {
-        contentType: file.mimetype,
-      },
-    });
-
-    stream.on("error", (err) => {
-      console.error("Error uploading file:", err);
-      res.status(500).json({ error: "Failed to upload image" });
-    });
-
-    stream.on("finish", async () => {
-      await fileUpload.makePublic();
-      const publicUrl = `https://storage.googleapis.com/${bucketName}/${fileName}`;
-      res.status(200).json({ image_url: publicUrl, error: null });
-    });
-
-    stream.end(file.buffer);
-  } catch (err) {
-    console.error("Error uploading file:", err);
-    res.status(500).json({ image_url: null, error: "Failed to upload image" });
+export const uploadImage = async (req, res) => {
+  if (req.method !== "POST") {
+    return res.status(405).send("Method Not Allowed");
   }
+
+  const chunks = [];
+  req
+    .on("data", (chunk) => {
+      chunks.push(chunk);
+    })
+    .on("end", async () => {
+      const buffer = Buffer.concat(chunks);
+      const contentType = req.headers["content-type"];
+
+      if (!contentType.startsWith("image/")) {
+        return res.status(400).send("File is not an image");
+      }
+
+      const newFilename = `${uuidv4()}`;
+      const blob = storage.bucket(bucketName).file(newFilename);
+      const blobStream = blob.createWriteStream({
+        resumable: false,
+        contentType: contentType,
+      });
+
+      blobStream.on("error", (err) => {
+        console.error(err);
+        return res.status(500).send("Error uploading file");
+      });
+
+      blobStream.on("finish", () => {
+        const publicUrl = `https://storage.googleapis.com/${bucketName}/${newFilename}`;
+        return res.status(200).send({ image_url: publicUrl });
+      });
+
+      blobStream.end(buffer);
+    });
 };
